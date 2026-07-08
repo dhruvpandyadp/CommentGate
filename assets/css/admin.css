@@ -1,0 +1,171 @@
+.commentgate-check {
+	display: block;
+	margin: 0 0 0.35rem;
+}
+
+.commentgate-inline-color {
+	margin-left: 1rem;
+}
+
+.commentgate-tabs {
+	margin: 1rem 0;
+}
+
+.commentgate-discussion-card {
+	align-items: center;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	border-left: 4px solid #2271b1;
+	display: flex;
+	gap: 1rem;
+	justify-content: space-between;
+	margin: 1rem 0;
+	max-width: 900px;
+	padding: 1rem;
+}
+
+.commentgate-discussion-card h2 {
+	margin: 0 0 0.35rem;
+}
+
+.commentgate-discussion-card p {
+	margin: 0;
+}
+
+.commentgate-summary-grid {
+	display: grid;
+	gap: 12px;
+	grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+	margin: 16px 0;
+	max-width: 1100px;
+}
+
+.commentgate-summary-card {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	box-sizing: border-box;
+	padding: 14px;
+}
+
+.commentgate-summary-card span {
+	color: #646970;
+	display: block;
+	font-size: 12px;
+	margin-bottom: 8px;
+	text-transform: uppercase;
+}
+
+.commentgate-summary-card strong {
+	color: #1d2327;
+	display: block;
+	font-size: 18px;
+	line-height: 1.3;
+}
+
+.commentgate-filters {
+	align-items: center;
+	background: #fff;
+	border: 1px solid #dcdcde;
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin: 16px 0;
+	max-width: 1100px;
+	padding: 12px;
+}
+
+.commentgate-filters label {
+	font-weight: 600;
+}
+
+.commentgate-status {
+	border-radius: 4px;
+	display: inline-block;
+	font-weight: 600;
+	padding: 0.15rem 0.45rem;
+}
+
+.commentgate-status-paid {
+	background: #edfaef;
+	color: #0a6b21;
+}
+
+.commentgate-status-pending {
+	background: #fff8e5;
+	color: #8a5a00;
+}
+
+.commentgate-status-refunded {
+	background: #fcf0f1;
+	color: #8a2424;
+}
+
+.commentgate-diagnostics {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	box-sizing: border-box;
+	margin: 16px 0;
+	max-width: 1100px;
+	padding: 14px;
+}
+
+.commentgate-diagnostics h2 {
+	margin-top: 0;
+}
+
+.commentgate-diagnostics ul {
+	display: grid;
+	gap: 8px;
+	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+	margin: 0 0 12px;
+}
+
+.commentgate-diagnostics li {
+	margin: 0;
+}
+
+.commentgate-diagnostics span {
+	border-radius: 4px;
+	display: inline-block;
+	font-weight: 600;
+	margin-right: 6px;
+	min-width: 28px;
+	padding: 2px 6px;
+	text-align: center;
+}
+
+.commentgate-diagnostics .is-pass span {
+	background: #edfaef;
+	color: #0a6b21;
+}
+
+.commentgate-diagnostics .is-missing span {
+	background: #fff8e5;
+	color: #8a5a00;
+}
+
+.commentgate-email-preview {
+	margin-top: 24px;
+	max-width: 900px;
+}
+
+.commentgate-email-preview-frame {
+	background: #fff;
+	border: 1px solid #dcdcde;
+	box-sizing: border-box;
+	margin-bottom: 18px;
+	padding: 12px;
+}
+
+.commentgate-select-logo,
+.commentgate-remove-logo {
+	margin-top: 6px;
+}
+
+.commentgate-plain-email-preview {
+	background: #fff;
+	color: #1d2327;
+	margin: 0;
+	overflow: auto;
+	white-space: pre-wrap;
+}
