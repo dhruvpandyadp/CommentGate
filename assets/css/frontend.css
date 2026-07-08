@@ -1,0 +1,149 @@
+.commentgate-box {
+	border: 1px solid #dcdcde;
+	border-radius: 6px;
+	margin: 1.5rem 0;
+	padding: 1.25rem;
+}
+
+.commentgate-locked-form .comment-form-comment,
+.commentgate-locked-form .comment-form-author,
+.commentgate-locked-form .comment-form-email,
+.commentgate-locked-form .comment-form-url,
+.commentgate-locked-form .comment-notes,
+.commentgate-locked-form .logged-in-as,
+.commentgate-locked-form .form-submit,
+.commentgate-locked-form textarea,
+.commentgate-locked-form textarea[name="comment"],
+.commentgate-locked-form label[for="comment"],
+.commentgate-locked-form input[type="submit"],
+.commentgate-locked-form button[type="submit"]:not(.commentgate-button) {
+	display: none !important;
+}
+
+.commentgate-locked-form .commentgate-box,
+.commentgate-locked-form .commentgate-email,
+.commentgate-locked-form .commentgate-email input,
+.commentgate-locked-form .commentgate-button {
+	display: revert !important;
+}
+
+.commentgate-comments-locked .comment-form-comment,
+.commentgate-comments-locked .form-submit.wp-block-button,
+.commentgate-comments-locked .form-submit,
+.commentgate-comments-locked textarea[name="comment"],
+.commentgate-comments-locked label[for="comment"],
+.commentgate-comments-locked input[type="submit"],
+.commentgate-comments-locked button[type="submit"]:not(.commentgate-button) {
+	display: none !important;
+}
+
+.commentgate-comments-locked .commentgate-box,
+.commentgate-comments-locked .commentgate-email,
+.commentgate-comments-locked .commentgate-email input,
+.commentgate-comments-locked .commentgate-button {
+	display: revert !important;
+}
+
+.commentgate-price {
+	font-weight: 700;
+	margin-top: 0;
+}
+
+.commentgate-notice {
+	background: #f0f6fc;
+	border-left: 4px solid #2271b1;
+	margin: 0 0 1rem;
+	padding: 0.75rem;
+}
+
+.commentgate-notice-error {
+	background: #fcf0f1;
+	border-left-color: #d63638;
+}
+
+.commentgate-form {
+	display: grid;
+	gap: 0.75rem;
+	margin-top: 0.75rem;
+	max-width: 520px;
+}
+
+.commentgate-email input[type="email"] {
+	border: 1px solid #c3c4c7;
+	border-radius: 6px;
+	box-sizing: border-box;
+	display: block;
+	margin-top: 0.25rem;
+	min-height: 44px;
+	padding: 0.6rem 0.75rem;
+	width: 100%;
+}
+
+.commentgate-button {
+	transition: filter 120ms ease, transform 120ms ease;
+}
+
+.commentgate-form .commentgate-gateway-divider {
+	align-items: center !important;
+	box-sizing: border-box;
+	clear: both;
+	color: #1d2327;
+	display: flex !important;
+	font-size: 1rem;
+	font-weight: 500;
+	font-style: italic;
+	gap: 0.65rem;
+	justify-content: center;
+	line-height: 1;
+	margin: -0.35rem 0;
+	text-align: center;
+	width: 100%;
+}
+
+.commentgate-form .commentgate-gateway-divider::before,
+.commentgate-form .commentgate-gateway-divider::after {
+	content: none !important;
+	display: none !important;
+}
+
+.commentgate-form .commentgate-gateway-divider-line {
+	border: 0 !important;
+	border-top-color: #1d2327 !important;
+	border-top-style: solid !important;
+	border-top-width: 1px !important;
+	display: block !important;
+	flex: 1 1 0 !important;
+	height: 0 !important;
+	max-width: 220px;
+	min-width: 72px;
+	opacity: 1 !important;
+}
+
+.commentgate-form .commentgate-gateway-divider-text {
+	display: inline-block !important;
+	flex: 0 0 auto !important;
+	font-style: italic !important;
+	margin: 0 !important;
+	position: relative;
+	text-align: center !important;
+	white-space: nowrap;
+}
+
+.commentgate-locked-form .commentgate-gateway-divider,
+.commentgate-comments-locked .commentgate-gateway-divider {
+	display: flex !important;
+}
+
+.commentgate-button:hover,
+.commentgate-button:focus {
+	filter: brightness(0.96);
+	outline: 2px solid transparent;
+	outline-offset: 2px;
+}
+
+.commentgate-button-single {
+	align-items: center;
+	display: inline-flex;
+	gap: 0.65rem;
+	justify-content: center;
+}
