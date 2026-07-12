@@ -9,7 +9,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching,WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared,PluginCheck.Security.DirectDB.UnescapedDBParameter
+// phpcs:disable WordPress.DB.DirectDatabaseQuery.DirectQuery,WordPress.DB.DirectDatabaseQuery.NoCaching
 
 class CommentGate_Admin_Payments {
 	private $payments;
@@ -223,8 +223,8 @@ class CommentGate_Admin_Payments {
 	}
 
 	private function build_where_clause( $filters, $include_status = true ) {
-		$where  = array( '1=1' );
-		$params = array();
+		$where  = array( '1 = %d' );
+		$params = array( 1 );
 
 		if ( $include_status && $filters['status'] ) {
 			$where[]  = 'status = %s';
@@ -252,12 +252,6 @@ class CommentGate_Admin_Payments {
 		);
 	}
 
-	private function prepare_sql( $sql, $params ) {
-		global $wpdb;
-
-		return $params ? $wpdb->prepare( $sql, $params ) : $sql;
-	}
-
 	private function get_payment_rows( $filters, $limit = 25, $offset = 0 ) {
 		global $wpdb;
 
@@ -267,7 +261,7 @@ class CommentGate_Admin_Payments {
 		$where['params'][] = max( 1, absint( $limit ) );
 		$where['params'][] = max( 0, absint( $offset ) );
 
-		return $wpdb->get_results( $this->prepare_sql( $sql, $where['params'] ) );
+		return $wpdb->get_results( $wpdb->prepare( $sql, $where['params'] ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	private function get_payment_count( $filters ) {
@@ -276,7 +270,7 @@ class CommentGate_Admin_Payments {
 		$table = CommentGate_Payments_Table::table_name();
 		$where = $this->build_where_clause( $filters );
 
-		return absint( $wpdb->get_var( $this->prepare_sql( "SELECT COUNT(*) FROM {$table}{$where['sql']}", $where['params'] ) ) );
+		return absint( $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table}{$where['sql']}", $where['params'] ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
 	private function get_summary( $filters ) {
@@ -289,32 +283,32 @@ class CommentGate_Admin_Payments {
 		$pending_params  = array_merge( $earnings_where['params'], array( 'pending' ) );
 
 		$status_counts = $wpdb->get_results(
-			$this->prepare_sql(
+			$wpdb->prepare(
 				"SELECT status, COUNT(*) AS total FROM {$table}{$filtered_where['sql']} GROUP BY status",
 				$filtered_where['params']
 			)
-		);
+		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		$paid_totals = $wpdb->get_results(
-			$this->prepare_sql(
+			$wpdb->prepare(
 				"SELECT currency, SUM(amount) AS total FROM {$table}{$earnings_where['sql']} AND status = %s GROUP BY currency ORDER BY currency ASC",
 				$earnings_params
 			)
-		);
+		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		$pending_totals = $wpdb->get_results(
-			$this->prepare_sql(
+			$wpdb->prepare(
 				"SELECT currency, SUM(amount) AS total FROM {$table}{$earnings_where['sql']} AND status = %s GROUP BY currency ORDER BY currency ASC",
 				$pending_params
 			)
-		);
+		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		$comments_remaining = $wpdb->get_var(
-			$this->prepare_sql(
+			$wpdb->prepare(
 				"SELECT SUM(comments_remaining) FROM {$table}{$filtered_where['sql']} AND access_type = 'comments' AND status = 'paid'",
 				$filtered_where['params']
 			)
-		);
+		); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 
 		return array(
 			'status_counts'      => $status_counts,
