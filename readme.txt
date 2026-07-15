@@ -17,7 +17,7 @@ Monetize comments by requiring Stripe or PayPal payment before visitors can comm
 
 Use CommentGate for paid communities, expert Q&A posts, premium discussion areas, gated announcements, niche publications, and any site where comment access should have value.
 
-= Main Features =
+## Main Features
 
 * **Pay Before Commenting** - Hide the comment textarea and submit button until payment access is verified.
 * **Stripe and PayPal** - Enable Stripe, PayPal, or both payment gateways.
@@ -41,7 +41,7 @@ Use CommentGate for paid communities, expert Q&A posts, premium discussion areas
 * **Theme-Friendly Frontend** - Uses theme button styles by default while hiding unsupported comment fields before payment.
 * **Webhook Support** - Supports gateway webhook callbacks for payment lifecycle updates.
 
-= CommentGate Dashboard =
+## CommentGate Dashboard 
 
 CommentGate lives under **Comments > CommentGate** and includes one tabbed dashboard:
 
@@ -53,7 +53,7 @@ CommentGate lives under **Comments > CommentGate** and includes one tabbed dashb
 
 General Settings also includes a quick link to WordPress **Website Discussion Settings** so comment moderation, notifications, avatars, and default discussion rules stay easy to reach.
 
-= Payment Gateways =
+## Payment Gateways
 
 CommentGate can enable one or both payment gateways:
 
@@ -62,7 +62,7 @@ CommentGate can enable one or both payment gateways:
 
 If both gateways are enabled, visitors can choose Stripe or PayPal on the payment wall.
 
-= Third-Party Services =
+## Third-Party Services
 
 CommentGate connects to third-party payment services only when an administrator configures a gateway and a visitor starts checkout, returns from checkout, when an administrator starts a refund, or when the payment service sends a configured webhook.
 
@@ -70,18 +70,18 @@ Stripe requests are sent to `https://api.stripe.com` to create Checkout Sessions
 
 PayPal requests are sent to `https://api-m.sandbox.paypal.com` in sandbox mode or `https://api-m.paypal.com` in live mode to create orders, capture approved orders, create refunds, obtain API access tokens, verify webhook signatures, and update payment status. Data sent to PayPal may include the selected post title, payment amount, currency, plugin payment ID, PayPal order or capture ID, and configured API credentials. PayPal user agreement: https://www.paypal.com/us/legalhub/useragreement-full. PayPal privacy statement: https://www.paypal.com/us/legalhub/privacy-full.
 
-= Refunds =
+## Refunds =
 
 Administrators can refund paid transactions from Transaction History when access has not been used. For comment quantity access, unused means all purchased comment credits are still available. For duration access, unused means CommentGate has not attached the payment to a submitted comment. Refund actions call the configured Stripe or PayPal API, then mark the payment as refunded in CommentGate with refund ID, reason, and refund date fields when available.
 
-= API Documentation =
+## API Documentation
 
 Use these official guides when creating payment credentials:
 
 * Stripe API keys: https://docs.stripe.com/keys
 * PayPal REST API credentials: https://developer.paypal.com/api/rest/
 
-= WP-CLI Commands =
+## WP-CLI Commands 
 
 CommentGate registers the `wp commentgate` command when WP-CLI is available.
 
@@ -92,7 +92,7 @@ CommentGate registers the `wp commentgate` command when WP-CLI is available.
 * `wp commentgate payment 123` - Show one payment record.
 * `wp commentgate refund 123 --yes` - Refund unused paid access.
 
-= Webhook Events =
+## Webhook Events
 
 For Stripe, configure the webhook URL shown in CommentGate and send these events:
 
