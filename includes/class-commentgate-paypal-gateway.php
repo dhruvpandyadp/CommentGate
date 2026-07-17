@@ -13,11 +13,28 @@ class CommentGate_PayPal_Gateway {
 	private $settings;
 	private $payments;
 
+	/**
+	 * Constructor.
+	 *
+	 * @param CommentGate_Settings       $settings Settings accessor.
+	 * @param CommentGate_Payments_Table $payments Payment persistence.
+	 */
 	public function __construct( $settings, $payments ) {
 		$this->settings = $settings;
 		$this->payments = $payments;
 	}
 
+	/**
+	 * Create a pending payment row, create a PayPal order for it via the
+	 * PayPal API, then redirect the visitor to PayPal's approval page.
+	 * Calls wp_die() on missing config or a failed API call, and exits after redirecting.
+	 *
+	 * @param int    $post_id          Post the visitor is paying to comment on.
+	 * @param float  $price            Amount to charge, in the site's configured currency.
+	 * @param string $email            Guest email, if not logged in.
+	 * @param string $access_type      Either 'duration' or 'comments'.
+	 * @param int    $comment_quantity Number of comment credits to grant when access_type is 'comments'.
+	 */
 	public function redirect_to_checkout( $post_id, $price, $email = '', $access_type = 'duration', $comment_quantity = 1 ) {
 		if ( ! $this->settings->get( 'paypal_client_id' ) || ! $this->settings->get( 'paypal_secret' ) ) {
 			wp_die( esc_html__( 'PayPal is not configured.', 'commentgate' ), esc_html__( 'CommentGate error', 'commentgate' ), array( 'response' => 400 ) );
@@ -25,12 +42,12 @@ class CommentGate_PayPal_Gateway {
 
 		$pending = $this->payments->create_pending(
 			array(
-				'post_id'     => $post_id,
-				'gateway'     => 'paypal',
-				'guest_email' => $email,
-				'amount'      => $price,
-				'currency'    => $this->settings->get( 'currency' ),
-				'access_type' => 'comments' === $access_type ? 'comments' : 'duration',
+				'post_id'       => $post_id,
+				'gateway'       => 'paypal',
+				'guest_email'   => $email,
+				'amount'        => $price,
+				'currency'      => $this->settings->get( 'currency' ),
+				'access_type'   => 'comments' === $access_type ? 'comments' : 'duration',
 				'comment_limit' => 'comments' === $access_type ? max( 1, absint( $comment_quantity ) ) : 0,
 			)
 		);
@@ -100,6 +117,12 @@ class CommentGate_PayPal_Gateway {
 		wp_die( esc_html__( 'PayPal approval URL missing.', 'commentgate' ), esc_html__( 'CommentGate error', 'commentgate' ), array( 'response' => 500 ) );
 	}
 
+	/**
+	 * Redirect to a PayPal-hosted URL, temporarily allow-listing its host so
+	 * wp_safe_redirect() does not block the off-site redirect.
+	 *
+	 * @param string $url PayPal approval URL to redirect to.
+	 */
 	private function safe_gateway_redirect( $url ) {
 		$host = wp_parse_url( $url, PHP_URL_HOST );
 		if ( ! $host ) {
@@ -117,6 +140,16 @@ class CommentGate_PayPal_Gateway {
 		wp_safe_redirect( $url );
 	}
 
+	/**
+	 * Capture a PayPal order after the visitor returns from the approval page,
+	 * mark the payment paid, and set the access cookie. Verifies the order ID
+	 * and access token match the payment record before calling PayPal, and
+	 * calls wp_die() if the return is invalid or the capture is not completed.
+	 *
+	 * @param int    $payment_id   Payment record ID.
+	 * @param string $order_id     PayPal order ID.
+	 * @param string $access_token Raw access token issued when checkout started.
+	 */
 	public function capture_order( $payment_id, $order_id, $access_token ) {
 		$payment = $this->payments->find_by_id( $payment_id );
 		if (
@@ -160,6 +193,13 @@ class CommentGate_PayPal_Gateway {
 		$this->set_access_cookie( $access_token );
 	}
 
+	/**
+	 * Handle an incoming PayPal webhook: verify its signature via the PayPal
+	 * API, then mark the matching payment refunded on PAYMENT.CAPTURE.REFUNDED.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return WP_REST_Response
+	 */
 	public function handle_webhook( WP_REST_Request $request ) {
 		$body = $request->get_body();
 
@@ -180,6 +220,12 @@ class CommentGate_PayPal_Gateway {
 		return new WP_REST_Response( array( 'ok' => true ), 200 );
 	}
 
+	/**
+	 * Issue a full refund for a payment via the PayPal Captures Refund API.
+	 *
+	 * @param object $payment Payment row.
+	 * @return string|WP_Error PayPal refund ID on success, WP_Error on failure.
+	 */
 	public function refund_payment( $payment ) {
 		if ( ! $this->settings->get( 'paypal_client_id' ) || ! $this->settings->get( 'paypal_secret' ) ) {
 			return new WP_Error( 'commentgate_paypal_not_configured', __( 'PayPal is not configured.', 'commentgate' ) );
@@ -214,6 +260,15 @@ class CommentGate_PayPal_Gateway {
 		return sanitize_text_field( $data['id'] );
 	}
 
+	/**
+	 * Verify a PayPal webhook's authenticity by asking PayPal's
+	 * verify-webhook-signature API to check it, since PayPal signatures cannot
+	 * be verified locally without their certificate chain.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request (used for its signature headers).
+	 * @param string           $body    Raw request body.
+	 * @return bool
+	 */
 	private function verify_webhook( WP_REST_Request $request, $body ) {
 		$webhook_id = $this->settings->get( 'paypal_webhook_id' );
 		if ( empty( $webhook_id ) ) {
@@ -250,12 +305,18 @@ class CommentGate_PayPal_Gateway {
 		return isset( $data['verification_status'] ) && 'SUCCESS' === $data['verification_status'];
 	}
 
+	/**
+	 * Obtain an OAuth2 access token from PayPal using the configured client
+	 * credentials. Calls wp_die() if the request fails or no token is returned.
+	 *
+	 * @return string PayPal OAuth2 access token.
+	 */
 	private function access_token() {
 		$response = wp_remote_post(
 			$this->api_base() . '/v1/oauth2/token',
 			array(
 				'headers' => array(
-					'Authorization' => 'Basic ' . base64_encode( $this->settings->get( 'paypal_client_id' ) . ':' . $this->settings->get( 'paypal_secret' ) ),
+					'Authorization' => 'Basic ' . base64_encode( $this->settings->get( 'paypal_client_id' ) . ':' . $this->settings->get( 'paypal_secret' ) ), // phpcs:ignore WordPress.PHP.DiscouragedPHPFunctions.obfuscation_base64_encode -- Required by the PayPal OAuth2 HTTP Basic Auth spec, not used for obfuscation.
 				),
 				'body'    => array( 'grant_type' => 'client_credentials' ),
 				'timeout' => 20,
@@ -274,10 +335,21 @@ class CommentGate_PayPal_Gateway {
 		return $data['access_token'];
 	}
 
+	/**
+	 * Base URL for the PayPal REST API, live or sandbox depending on settings.
+	 *
+	 * @return string
+	 */
 	private function api_base() {
 		return 'live' === $this->settings->get( 'paypal_mode' ) ? 'https://api-m.paypal.com' : 'https://api-m.sandbox.paypal.com';
 	}
 
+	/**
+	 * Set the HttpOnly, SameSite=Lax raw access-token cookie granting comment
+	 * access, and mirror it into $_COOKIE so it is usable within the same request.
+	 *
+	 * @param string $token Raw access token.
+	 */
 	private function set_access_cookie( $token ) {
 		setcookie(
 			'commentgate_access',

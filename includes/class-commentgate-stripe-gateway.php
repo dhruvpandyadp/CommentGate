@@ -13,11 +13,28 @@ class CommentGate_Stripe_Gateway {
 	private $settings;
 	private $payments;
 
+	/**
+	 * Constructor.
+	 *
+	 * @param CommentGate_Settings        $settings Settings accessor.
+	 * @param CommentGate_Payments_Table  $payments Payment persistence.
+	 */
 	public function __construct( $settings, $payments ) {
 		$this->settings = $settings;
 		$this->payments = $payments;
 	}
 
+	/**
+	 * Create a pending payment row, create a Stripe Checkout Session for it via
+	 * the Stripe API, then redirect the visitor to the hosted checkout page.
+	 * Calls wp_die() on missing config or a failed API call, and exits after redirecting.
+	 *
+	 * @param int    $post_id          Post the visitor is paying to comment on.
+	 * @param float  $price            Amount to charge, in the site's configured currency.
+	 * @param string $email            Guest email, if not logged in.
+	 * @param string $access_type      Either 'duration' or 'comments'.
+	 * @param int    $comment_quantity Number of comment credits to grant when access_type is 'comments'.
+	 */
 	public function redirect_to_checkout( $post_id, $price, $email = '', $access_type = 'duration', $comment_quantity = 1 ) {
 		$secret = $this->settings->get( 'stripe_secret' );
 		if ( empty( $secret ) ) {
@@ -26,12 +43,12 @@ class CommentGate_Stripe_Gateway {
 
 		$pending = $this->payments->create_pending(
 			array(
-				'post_id'     => $post_id,
-				'gateway'     => 'stripe',
-				'guest_email' => $email,
-				'amount'      => $price,
-				'currency'    => $this->settings->get( 'currency' ),
-				'access_type' => 'comments' === $access_type ? 'comments' : 'duration',
+				'post_id'       => $post_id,
+				'gateway'       => 'stripe',
+				'guest_email'   => $email,
+				'amount'        => $price,
+				'currency'      => $this->settings->get( 'currency' ),
+				'access_type'   => 'comments' === $access_type ? 'comments' : 'duration',
 				'comment_limit' => 'comments' === $access_type ? max( 1, absint( $comment_quantity ) ) : 0,
 			)
 		);
@@ -47,16 +64,16 @@ class CommentGate_Stripe_Gateway {
 		$cancel_url  = add_query_arg( 'commentgate', 'failed', get_permalink( $post_id ) );
 
 		$body = array(
-			'mode'                                  => 'payment',
-			'success_url'                           => $success_url,
-			'cancel_url'                            => $cancel_url,
-			'client_reference_id'                   => (string) $pending['id'],
-			'metadata[payment_id]'                  => (string) $pending['id'],
-			'metadata[post_id]'                     => (string) $post_id,
-			'metadata[access_type]'                 => 'comments' === $access_type ? 'comments' : 'duration',
-			'metadata[comment_quantity]'            => (string) max( 1, absint( $comment_quantity ) ),
-			'line_items[0][quantity]'               => 1,
-			'line_items[0][price_data][currency]'   => strtolower( $this->settings->get( 'currency' ) ),
+			'mode'                                   => 'payment',
+			'success_url'                            => $success_url,
+			'cancel_url'                             => $cancel_url,
+			'client_reference_id'                    => (string) $pending['id'],
+			'metadata[payment_id]'                   => (string) $pending['id'],
+			'metadata[post_id]'                      => (string) $post_id,
+			'metadata[access_type]'                  => 'comments' === $access_type ? 'comments' : 'duration',
+			'metadata[comment_quantity]'             => (string) max( 1, absint( $comment_quantity ) ),
+			'line_items[0][quantity]'                => 1,
+			'line_items[0][price_data][currency]'    => strtolower( $this->settings->get( 'currency' ) ),
 			'line_items[0][price_data][unit_amount]' => (string) round( (float) $price * 100 ),
 			'line_items[0][price_data][product_data][name]' => sprintf(
 				/* translators: %s: post title */
@@ -93,6 +110,12 @@ class CommentGate_Stripe_Gateway {
 		exit;
 	}
 
+	/**
+	 * Redirect to a Stripe-hosted URL, temporarily allow-listing its host so
+	 * wp_safe_redirect() does not block the off-site redirect.
+	 *
+	 * @param string $url Stripe checkout URL to redirect to.
+	 */
 	private function safe_gateway_redirect( $url ) {
 		$host = wp_parse_url( $url, PHP_URL_HOST );
 		if ( ! $host ) {
@@ -110,11 +133,19 @@ class CommentGate_Stripe_Gateway {
 		wp_safe_redirect( $url );
 	}
 
+	/**
+	 * Handle an incoming Stripe webhook: verify its signature, then mark the
+	 * matching payment paid on checkout.session.completed, or refunded on
+	 * charge.refunded / checkout.session.async_payment_failed.
+	 *
+	 * @param WP_REST_Request $request Incoming REST request.
+	 * @return WP_REST_Response
+	 */
 	public function handle_webhook( WP_REST_Request $request ) {
-		$payload    = $request->get_body();
-		$event      = json_decode( $payload, true );
-		$secret     = $this->settings->get( 'stripe_webhook_secret' );
-		$signature  = $request->get_header( 'stripe-signature' );
+		$payload   = $request->get_body();
+		$event     = json_decode( $payload, true );
+		$secret    = $this->settings->get( 'stripe_webhook_secret' );
+		$signature = $request->get_header( 'stripe-signature' );
 
 		if ( empty( $secret ) || ! $this->verify_signature( $payload, $signature, $secret ) ) {
 			return new WP_REST_Response( array( 'error' => 'Invalid signature' ), 400 );
@@ -149,6 +180,12 @@ class CommentGate_Stripe_Gateway {
 		return new WP_REST_Response( array( 'ok' => true ), 200 );
 	}
 
+	/**
+	 * Issue a full refund for a payment via the Stripe Refunds API.
+	 *
+	 * @param object $payment Payment row.
+	 * @return string|WP_Error Stripe refund ID on success, WP_Error on failure.
+	 */
 	public function refund_payment( $payment ) {
 		$secret = $this->settings->get( 'stripe_secret' );
 		if ( empty( $secret ) ) {
@@ -181,6 +218,15 @@ class CommentGate_Stripe_Gateway {
 		return sanitize_text_field( $data['id'] );
 	}
 
+	/**
+	 * Verify a Stripe webhook signature header against the payload using the
+	 * configured webhook secret, rejecting stale timestamps to prevent replay.
+	 *
+	 * @param string $payload   Raw request body.
+	 * @param string $signature Value of the Stripe-Signature header.
+	 * @param string $secret    Configured Stripe webhook signing secret.
+	 * @return bool
+	 */
 	private function verify_signature( $payload, $signature, $secret ) {
 		if ( ! $signature ) {
 			return false;
@@ -195,6 +241,11 @@ class CommentGate_Stripe_Gateway {
 		}
 
 		if ( empty( $parts['t'] ) || empty( $parts['v1'] ) ) {
+			return false;
+		}
+
+		// Reject stale signatures so a captured webhook payload cannot be replayed later.
+		if ( abs( time() - absint( $parts['t'] ) ) > 5 * MINUTE_IN_SECONDS ) {
 			return false;
 		}
 
