@@ -5,7 +5,7 @@
 [![Stripe](https://img.shields.io/badge/Stripe-Checkout-635bff)](https://stripe.com/)
 [![PayPal](https://img.shields.io/badge/PayPal-Checkout-003087)](https://www.paypal.com/)
 [![License](https://img.shields.io/badge/License-GPL--2.0--or--later-green)](https://www.gnu.org/licenses/gpl-2.0.html)
-[![Version](https://img.shields.io/badge/Version-1.0.0-brightgreen)](https://commentgate.com)
+[![Version](https://img.shields.io/badge/Version-1.0.1-brightgreen)](https://commentgate.com)
 
 **CommentGate** helps WordPress site owners monetize engagement by requiring visitors to complete Stripe or PayPal payment before commenting on selected posts, pages, or public custom post types.
 
@@ -277,11 +277,11 @@ Benefit: Cleaner discussion and stronger intent
 
 | Field | Value |
 |-------|-------|
-| Contributors | `dhruvpandya` |
+| Contributors | `dhruvpandya`, `alkesh7` |
 | Requires at least | `6.0` |
 | Tested up to | `7.0` |
 | Requires PHP | `7.4` |
-| Stable tag | `1.0.0` |
+| Stable tag | `1.0.1` |
 | License | `GPL-2.0-or-later` |
 | Text Domain | `commentgate` |
 

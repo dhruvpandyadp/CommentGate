@@ -18,17 +18,32 @@ class CommentGate_Admin_Payments {
 	private $stripe;
 	private $paypal;
 
+	/**
+	 * Constructor.
+	 *
+	 * @param CommentGate_Payments_Table  $payments Payment persistence.
+	 * @param CommentGate_Stripe_Gateway  $stripe   Stripe gateway instance.
+	 * @param CommentGate_PayPal_Gateway  $paypal   PayPal gateway instance.
+	 */
 	public function __construct( $payments, $stripe, $paypal ) {
 		$this->payments = $payments;
 		$this->stripe   = $stripe;
 		$this->paypal   = $paypal;
 	}
 
+	/**
+	 * Wire up the admin-post handlers for row/bulk payment actions and CSV export.
+	 */
 	public function register() {
 		add_action( 'admin_post_commentgate_payments_action', array( $this, 'handle_action' ) );
 		add_action( 'admin_post_commentgate_export_payments', array( $this, 'export_csv' ) );
 	}
 
+	/**
+	 * Handle a row or bulk payment action (mark pending, refund, delete) from
+	 * the Transaction History screen. Requires manage_options and a valid
+	 * nonce; redirects back to the transaction history tab and exits.
+	 */
 	public function handle_action() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to manage CommentGate payments.', 'commentgate' ), esc_html__( 'CommentGate error', 'commentgate' ), array( 'response' => 403 ) );
@@ -63,9 +78,9 @@ class CommentGate_Admin_Payments {
 			esc_url_raw(
 				add_query_arg(
 					array(
-						'page'       => 'commentgate',
-						'tab'        => 'transaction-history',
-						'updated'    => '1',
+						'page'    => 'commentgate',
+						'tab'     => 'transaction-history',
+						'updated' => '1',
 					),
 					admin_url( 'edit-comments.php' )
 				)
@@ -74,17 +89,21 @@ class CommentGate_Admin_Payments {
 		exit;
 	}
 
+	/**
+	 * Render the Transaction History admin screen: summary cards, filters,
+	 * paginated payment table, and bulk action form. Gated on manage_options.
+	 */
 	public function render_page() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
 
-		$filters = $this->get_filters();
-		$paged   = max( 1, absint( wp_unslash( $_GET['paged'] ?? 1 ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$filters  = $this->get_filters();
+		$paged    = max( 1, absint( wp_unslash( $_GET['paged'] ?? 1 ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$per_page = 25;
-		$total   = $this->get_payment_count( $filters );
-		$rows    = $this->get_payment_rows( $filters, $per_page, ( $paged - 1 ) * $per_page );
-		$summary = $this->get_summary( $filters );
+		$total    = $this->get_payment_count( $filters );
+		$rows     = $this->get_payment_rows( $filters, $per_page, ( $paged - 1 ) * $per_page );
+		$summary  = $this->get_summary( $filters );
 		?>
 			<h2><?php esc_html_e( 'Transaction History', 'commentgate' ); ?></h2>
 			<?php $this->render_summary_cards( $summary ); ?>
@@ -164,6 +183,13 @@ class CommentGate_Admin_Payments {
 		<?php
 	}
 
+	/**
+	 * Refund a payment through its originating gateway (Stripe or PayPal) and
+	 * mark it refunded locally. Calls wp_die() if the gateway returns an error;
+	 * silently no-ops if the payment is not eligible for refund.
+	 *
+	 * @param int $payment_id Payment record ID.
+	 */
 	private function refund_payment( $payment_id ) {
 		$payment = $this->payments->find_by_id( absint( $payment_id ) );
 		if ( ! $this->payments->is_unused_refundable( $payment ) ) {
@@ -186,6 +212,11 @@ class CommentGate_Admin_Payments {
 		$this->payments->mark_refunded( $payment->id, $refund_id, 'admin_refund' );
 	}
 
+	/**
+	 * Read and sanitize the status/gateway/date-range filters from the query string.
+	 *
+	 * @return array
+	 */
 	private function get_filters() {
 		$status = sanitize_key( wp_unslash( $_GET['payment_status'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		if ( ! in_array( $status, array( 'paid', 'pending', 'refunded' ), true ) ) {
@@ -214,6 +245,12 @@ class CommentGate_Admin_Payments {
 		);
 	}
 
+	/**
+	 * Sanitize a Y-m-d date string, rejecting malformed or invalid calendar dates.
+	 *
+	 * @param string $date Raw date input.
+	 * @return string Empty string if invalid.
+	 */
 	private function sanitize_date( $date ) {
 		$date = sanitize_text_field( $date );
 		if ( ! preg_match( '/^\d{4}-\d{2}-\d{2}$/', $date ) ) {
@@ -224,6 +261,16 @@ class CommentGate_Admin_Payments {
 		return checkdate( $parts[1], $parts[2], $parts[0] ) ? $date : '';
 	}
 
+	/**
+	 * Build a prepared WHERE clause and its bound params from the active filters.
+	 *
+	 * @param array $filters        Filters from get_filters().
+	 * @param bool  $include_status Whether to include the status filter (false lets callers append their own status condition).
+	 * @return array {
+	 *     @type string $sql    WHERE clause SQL with %s/%d placeholders.
+	 *     @type array  $params Values to bind via $wpdb->prepare().
+	 * }
+	 */
 	private function build_where_clause( $filters, $include_status = true ) {
 		$where  = array( '1 = %d' );
 		$params = array( 1 );
@@ -254,18 +301,32 @@ class CommentGate_Admin_Payments {
 		);
 	}
 
+	/**
+	 * Fetch a page of payment rows matching the active filters, newest first.
+	 *
+	 * @param array $filters Filters from get_filters().
+	 * @param int   $limit   Max rows to return.
+	 * @param int   $offset  Row offset for pagination.
+	 * @return array
+	 */
 	private function get_payment_rows( $filters, $limit = 25, $offset = 0 ) {
 		global $wpdb;
 
-		$table = CommentGate_Payments_Table::table_name();
-		$where = $this->build_where_clause( $filters );
-		$sql   = "SELECT * FROM {$table}{$where['sql']} ORDER BY id DESC LIMIT %d OFFSET %d";
+		$table             = CommentGate_Payments_Table::table_name();
+		$where             = $this->build_where_clause( $filters );
+		$sql               = "SELECT * FROM {$table}{$where['sql']} ORDER BY id DESC LIMIT %d OFFSET %d";
 		$where['params'][] = max( 1, absint( $limit ) );
 		$where['params'][] = max( 0, absint( $offset ) );
 
 		return $wpdb->get_results( $wpdb->prepare( $sql, $where['params'] ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
+	/**
+	 * Count payment rows matching the active filters, for pagination.
+	 *
+	 * @param array $filters Filters from get_filters().
+	 * @return int
+	 */
 	private function get_payment_count( $filters ) {
 		global $wpdb;
 
@@ -275,6 +336,13 @@ class CommentGate_Admin_Payments {
 		return absint( $wpdb->get_var( $wpdb->prepare( "SELECT COUNT(*) FROM {$table}{$where['sql']}", $where['params'] ) ) ); // phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared,WordPress.DB.PreparedSQL.InterpolatedNotPrepared
 	}
 
+	/**
+	 * Build the summary card data: status counts, paid/pending totals per
+	 * currency, and remaining comment credits, for the active filters.
+	 *
+	 * @param array $filters Filters from get_filters().
+	 * @return array
+	 */
 	private function get_summary( $filters ) {
 		global $wpdb;
 
@@ -320,6 +388,12 @@ class CommentGate_Admin_Payments {
 		);
 	}
 
+	/**
+	 * Render the summary cards (earnings, pending value, transaction counts,
+	 * comment credits left) at the top of the Transaction History screen.
+	 *
+	 * @param array $summary Summary data from get_summary().
+	 */
 	private function render_summary_cards( $summary ) {
 		$counts = array(
 			'paid'     => 0,
@@ -364,6 +438,12 @@ class CommentGate_Admin_Payments {
 		<?php
 	}
 
+	/**
+	 * Format a list of per-currency totals into a "USD 12.00 / EUR 5.00" string.
+	 *
+	 * @param array $totals Rows with currency and total properties.
+	 * @return string
+	 */
 	private function format_currency_totals( $totals ) {
 		$parts = array();
 
@@ -378,6 +458,11 @@ class CommentGate_Admin_Payments {
 		return $parts ? implode( ' / ', $parts ) : __( 'None', 'commentgate' );
 	}
 
+	/**
+	 * Render the status/gateway/date-range filter form and the CSV export link.
+	 *
+	 * @param array $filters Current filters from get_filters().
+	 */
 	private function render_filters( $filters ) {
 		$export_url = wp_nonce_url(
 			add_query_arg(
@@ -414,12 +499,32 @@ class CommentGate_Admin_Payments {
 			<label for="commentgate_date_to"><?php esc_html_e( 'To', 'commentgate' ); ?></label>
 			<input id="commentgate_date_to" type="date" name="date_to" value="<?php echo esc_attr( $filters['date_to'] ); ?>">
 			<?php submit_button( __( 'Filter', 'commentgate' ), 'secondary', '', false ); ?>
-			<a class="button button-secondary" href="<?php echo esc_url( add_query_arg( array( 'page' => 'commentgate', 'tab' => 'transaction-history' ), admin_url( 'edit-comments.php' ) ) ); ?>"><?php esc_html_e( 'Clear', 'commentgate' ); ?></a>
+			<a class="button button-secondary" href="
+			<?php
+			echo esc_url(
+				add_query_arg(
+					array(
+						'page' => 'commentgate',
+						'tab'  => 'transaction-history',
+					),
+					admin_url( 'edit-comments.php' )
+				)
+			);
+			?>
+														"><?php esc_html_e( 'Clear', 'commentgate' ); ?></a>
 			<a class="button button-secondary" href="<?php echo esc_url( $export_url ); ?>"><?php esc_html_e( 'Export CSV', 'commentgate' ); ?></a>
 		</form>
 		<?php
 	}
 
+	/**
+	 * Render the pagination links, preserving the active filters in each page's URL.
+	 *
+	 * @param array $filters  Current filters from get_filters().
+	 * @param int   $paged    Current page number.
+	 * @param int   $per_page Rows per page.
+	 * @param int   $total    Total matching rows.
+	 */
 	private function render_pagination( $filters, $paged, $per_page, $total ) {
 		$total_pages = max( 1, (int) ceil( $total / $per_page ) );
 		if ( $total_pages < 2 ) {
@@ -450,6 +555,10 @@ class CommentGate_Admin_Payments {
 		echo '</div></div>';
 	}
 
+	/**
+	 * Stream the filtered payment rows as a CSV download. Requires
+	 * manage_options and a valid nonce; exits after writing output.
+	 */
 	public function export_csv() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			wp_die( esc_html__( 'You do not have permission to export CommentGate payments.', 'commentgate' ), esc_html__( 'CommentGate error', 'commentgate' ), array( 'response' => 403 ) );
@@ -471,23 +580,23 @@ class CommentGate_Admin_Payments {
 				array_map(
 					array( $this, 'csv_cell' ),
 					array(
-					$row->id,
-					$row->post_id,
-					get_the_title( $row->post_id ),
-					$row->gateway,
-					$row->amount,
-					$row->currency,
-					$row->status,
-					$row->user_id,
-					$row->guest_email,
-					$row->access_type,
-					$row->comment_limit,
-					$row->comments_remaining,
-					$row->created_at,
-					$row->paid_at,
-					$row->refunded_at,
-					$row->refund_id,
-					$row->refund_reason,
+						$row->id,
+						$row->post_id,
+						get_the_title( $row->post_id ),
+						$row->gateway,
+						$row->amount,
+						$row->currency,
+						$row->status,
+						$row->user_id,
+						$row->guest_email,
+						$row->access_type,
+						$row->comment_limit,
+						$row->comments_remaining,
+						$row->created_at,
+						$row->paid_at,
+						$row->refunded_at,
+						$row->refund_id,
+						$row->refund_reason,
 					)
 				)
 			);
@@ -495,6 +604,13 @@ class CommentGate_Admin_Payments {
 		exit;
 	}
 
+	/**
+	 * Prefix a CSV cell value with a single quote if it starts with a formula
+	 * trigger character, preventing CSV/formula injection when opened in spreadsheet software.
+	 *
+	 * @param mixed $value Raw cell value.
+	 * @return string
+	 */
 	private function csv_cell( $value ) {
 		$value = (string) $value;
 		if ( preg_match( '/^[=\-+@]/', $value ) ) {

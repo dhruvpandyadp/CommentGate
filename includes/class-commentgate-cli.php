@@ -40,18 +40,54 @@ class CommentGate_CLI {
 	public function status( $args, $assoc_args ) {
 		$options = $this->settings->get_all();
 		$rows    = array(
-			array( 'setting' => 'enabled', 'value' => '1' === $options['enabled'] ? 'yes' : 'no' ),
-			array( 'setting' => 'price', 'value' => $options['currency'] . ' ' . $options['price'] ),
-			array( 'setting' => 'gateway', 'value' => implode( ',', (array) $options['gateways'] ) ),
-			array( 'setting' => 'access_type', 'value' => $options['access_type'] ),
-			array( 'setting' => 'access_duration_minutes', 'value' => (string) absint( $options['access_duration'] ) ),
-			array( 'setting' => 'comments_per_purchase', 'value' => (string) absint( $options['comment_quantity'] ) ),
-			array( 'setting' => 'customer_email_format', 'value' => $options['email_format'] ),
-			array( 'setting' => 'post_types', 'value' => implode( ',', (array) $options['post_types'] ) ),
-			array( 'setting' => 'stripe_configured', 'value' => ( ! empty( $options['stripe_secret'] ) && ! empty( $options['stripe_webhook_secret'] ) ) ? 'yes' : 'no' ),
-			array( 'setting' => 'paypal_configured', 'value' => ( ! empty( $options['paypal_client_id'] ) && ! empty( $options['paypal_secret'] ) && ! empty( $options['paypal_webhook_id'] ) ) ? 'yes' : 'no' ),
-			array( 'setting' => 'stripe_webhook_url', 'value' => rest_url( 'commentgate/v1/stripe-webhook' ) ),
-			array( 'setting' => 'paypal_webhook_url', 'value' => rest_url( 'commentgate/v1/paypal-webhook' ) ),
+			array(
+				'setting' => 'enabled',
+				'value'   => '1' === $options['enabled'] ? 'yes' : 'no',
+			),
+			array(
+				'setting' => 'price',
+				'value'   => $options['currency'] . ' ' . $options['price'],
+			),
+			array(
+				'setting' => 'gateway',
+				'value'   => implode( ',', (array) $options['gateways'] ),
+			),
+			array(
+				'setting' => 'access_type',
+				'value'   => $options['access_type'],
+			),
+			array(
+				'setting' => 'access_duration_minutes',
+				'value'   => (string) absint( $options['access_duration'] ),
+			),
+			array(
+				'setting' => 'comments_per_purchase',
+				'value'   => (string) absint( $options['comment_quantity'] ),
+			),
+			array(
+				'setting' => 'customer_email_format',
+				'value'   => $options['email_format'],
+			),
+			array(
+				'setting' => 'post_types',
+				'value'   => implode( ',', (array) $options['post_types'] ),
+			),
+			array(
+				'setting' => 'stripe_configured',
+				'value'   => ( ! empty( $options['stripe_secret'] ) && ! empty( $options['stripe_webhook_secret'] ) ) ? 'yes' : 'no',
+			),
+			array(
+				'setting' => 'paypal_configured',
+				'value'   => ( ! empty( $options['paypal_client_id'] ) && ! empty( $options['paypal_secret'] ) && ! empty( $options['paypal_webhook_id'] ) ) ? 'yes' : 'no',
+			),
+			array(
+				'setting' => 'stripe_webhook_url',
+				'value'   => rest_url( 'commentgate/v1/stripe-webhook' ),
+			),
+			array(
+				'setting' => 'paypal_webhook_url',
+				'value'   => rest_url( 'commentgate/v1/paypal-webhook' ),
+			),
 		);
 
 		$this->format_items( $assoc_args['format'] ?? 'table', $rows, array( 'setting', 'value' ) );

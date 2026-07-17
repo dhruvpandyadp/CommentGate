@@ -15,6 +15,14 @@ class CommentGate_Comment_Gate {
 	private $stripe;
 	private $paypal;
 
+	/**
+	 * Constructor.
+	 *
+	 * @param CommentGate_Settings        $settings Settings accessor.
+	 * @param CommentGate_Payments_Table  $payments Payment persistence.
+	 * @param CommentGate_Stripe_Gateway  $stripe   Stripe gateway instance.
+	 * @param CommentGate_PayPal_Gateway  $paypal   PayPal gateway instance.
+	 */
 	public function __construct( $settings, $payments, $stripe, $paypal ) {
 		$this->settings = $settings;
 		$this->payments = $payments;
@@ -22,6 +30,10 @@ class CommentGate_Comment_Gate {
 		$this->paypal   = $paypal;
 	}
 
+	/**
+	 * Wire up all comment-gating filters/actions and the admin-post checkout
+	 * and return endpoints.
+	 */
 	public function register() {
 		add_filter( 'body_class', array( $this, 'body_class' ) );
 		add_filter( 'comment_form_defaults', array( $this, 'filter_comment_form' ) );
@@ -48,6 +60,12 @@ class CommentGate_Comment_Gate {
 		add_action( 'admin_post_nopriv_commentgate_paypal_return', array( $this, 'paypal_return' ) );
 	}
 
+	/**
+	 * Add a body class when the current post's comments are payment-locked for this visitor.
+	 *
+	 * @param array $classes Existing body classes.
+	 * @return array
+	 */
 	public function body_class( $classes ) {
 		$post = get_post();
 
@@ -58,6 +76,14 @@ class CommentGate_Comment_Gate {
 		return $classes;
 	}
 
+	/**
+	 * Replace comment_form() defaults with a "Pay to comment" state when the
+	 * current post is locked. First line of defense; see the render-time
+	 * filters below for themes that override these defaults.
+	 *
+	 * @param array $defaults comment_form() default arguments.
+	 * @return array
+	 */
 	public function filter_comment_form( $defaults ) {
 		if ( ! $this->is_locked_current() ) {
 			return $defaults;
@@ -126,6 +152,15 @@ class CommentGate_Comment_Gate {
 		return $post && $this->requires_payment( $post->ID ) && ! $this->has_access( $post->ID );
 	}
 
+	/**
+	 * Reject the comment submission with wp_die() (402 Payment Required) if the
+	 * post requires payment and the submitter has no valid access. Hooked on
+	 * preprocess_comment as the actual server-side enforcement, since the
+	 * form-hiding filters above are only a UX layer.
+	 *
+	 * @param array $commentdata Submitted comment data.
+	 * @return array
+	 */
 	public function block_unpaid_comment( $commentdata ) {
 		$post_id = isset( $commentdata['comment_post_ID'] ) ? absint( $commentdata['comment_post_ID'] ) : 0;
 
@@ -136,6 +171,14 @@ class CommentGate_Comment_Gate {
 		return $commentdata;
 	}
 
+	/**
+	 * Auto-approve a comment once its payment access has been verified, if the
+	 * "Paid comment moderation" setting is enabled.
+	 *
+	 * @param int|string|WP_Error $approved    Current approval status.
+	 * @param array                $commentdata Submitted comment data.
+	 * @return int|string|WP_Error
+	 */
 	public function auto_approve_paid_comment( $approved, $commentdata ) {
 		$post_id = isset( $commentdata['comment_post_ID'] ) ? absint( $commentdata['comment_post_ID'] ) : 0;
 
@@ -150,6 +193,12 @@ class CommentGate_Comment_Gate {
 		return 1;
 	}
 
+	/**
+	 * Link a newly posted comment to the payment that granted access, and
+	 * consume one comment credit if using comment-quantity based access.
+	 *
+	 * @param int $comment_id Newly created comment ID.
+	 */
 	public function attach_payment_to_comment( $comment_id ) {
 		$comment = get_comment( $comment_id );
 		if ( $comment ) {
@@ -157,6 +206,11 @@ class CommentGate_Comment_Gate {
 		}
 	}
 
+	/**
+	 * Handle the payment-box form submission: verify the nonce, then hand off
+	 * to the selected gateway's redirect_to_checkout(), which redirects
+	 * off-site and exits. Calls wp_die() on an invalid or unsupported request.
+	 */
 	public function start_payment() {
 		$post_id = absint( $_POST['post_id'] ?? 0 );
 
@@ -169,9 +223,9 @@ class CommentGate_Comment_Gate {
 			exit;
 		}
 
-		$gateway = sanitize_key( wp_unslash( $_POST['gateway'] ?? '' ) );
-		$email   = sanitize_email( wp_unslash( $_POST['guest_email'] ?? '' ) );
-		$price   = $this->price_for_post( $post_id );
+		$gateway          = sanitize_key( wp_unslash( $_POST['gateway'] ?? '' ) );
+		$email            = sanitize_email( wp_unslash( $_POST['guest_email'] ?? '' ) );
+		$price            = $this->price_for_post( $post_id );
 		$access_type      = $this->access_type_for_post( $post_id );
 		$comment_quantity = $this->comment_quantity_for_post( $post_id );
 
@@ -186,6 +240,11 @@ class CommentGate_Comment_Gate {
 		wp_die( esc_html__( 'Selected gateway is unavailable.', 'commentgate' ), esc_html__( 'CommentGate error', 'commentgate' ), array( 'response' => 400 ) );
 	}
 
+	/**
+	 * Handle the visitor's return from PayPal approval: capture the order via
+	 * the PayPal gateway, then redirect back to the post. Calls wp_die() on a
+	 * malformed return; exits after redirecting.
+	 */
 	public function paypal_return() {
 		$post_id    = absint( wp_unslash( $_GET['post_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$payment_id = absint( wp_unslash( $_GET['payment_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -201,6 +260,12 @@ class CommentGate_Comment_Gate {
 		exit;
 	}
 
+	/**
+	 * Handle the visitor's return from Stripe Checkout: set the access cookie
+	 * (payment confirmation itself arrives asynchronously via webhook) and
+	 * redirect back to the post. Calls wp_die() on a malformed return; exits
+	 * after redirecting.
+	 */
 	public function stripe_return() {
 		$post_id = absint( wp_unslash( $_GET['post_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$access  = sanitize_text_field( wp_unslash( $_GET['access'] ?? '' ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -214,6 +279,12 @@ class CommentGate_Comment_Gate {
 		exit;
 	}
 
+	/**
+	 * Handle the signed access link sent in customer emails: verify the signed
+	 * access value against the payment, set the signed access cookie, and
+	 * redirect to the post. Calls wp_die() (403) if the link is invalid or
+	 * expired; exits after redirecting.
+	 */
 	public function access_link() {
 		$post_id    = absint( wp_unslash( $_GET['post_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$payment_id = absint( wp_unslash( $_GET['payment_id'] ?? 0 ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
@@ -233,6 +304,13 @@ class CommentGate_Comment_Gate {
 		exit;
 	}
 
+	/**
+	 * Whether comments on a post require payment, considering the current
+	 * user's free-role membership, the post's own override, and the global setting.
+	 *
+	 * @param int $post_id Post ID to check.
+	 * @return bool
+	 */
 	public function requires_payment( $post_id ) {
 		$post = get_post( $post_id );
 		if ( ! $post ) {
@@ -257,15 +335,34 @@ class CommentGate_Comment_Gate {
 		return '1' === $options['enabled'] && in_array( $post->post_type, (array) $options['post_types'], true );
 	}
 
+	/**
+	 * Whether the current visitor already has active paid access to a post.
+	 *
+	 * @param int $post_id Post ID to check.
+	 * @return bool
+	 */
 	public function has_access( $post_id ) {
 		return $this->payments->user_has_access( $post_id );
 	}
 
+	/**
+	 * Price to charge for a post, using its per-post override if set.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string
+	 */
 	public function price_for_post( $post_id ) {
 		$custom = get_post_meta( $post_id, '_commentgate_price', true );
 		return $custom ? $custom : $this->settings->get( 'price' );
 	}
 
+	/**
+	 * Access type ('duration' or 'comments') to grant for a post, using its
+	 * per-post override if set.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return string
+	 */
 	public function access_type_for_post( $post_id ) {
 		$custom = get_post_meta( $post_id, '_commentgate_access_type', true );
 		if ( in_array( $custom, array( 'duration', 'comments' ), true ) ) {
@@ -276,11 +373,23 @@ class CommentGate_Comment_Gate {
 		return 'comments' === $access_type ? 'comments' : 'duration';
 	}
 
+	/**
+	 * Number of comment credits to grant per purchase for a post, using its
+	 * per-post override if set.
+	 *
+	 * @param int $post_id Post ID.
+	 * @return int
+	 */
 	public function comment_quantity_for_post( $post_id ) {
 		$custom = absint( get_post_meta( $post_id, '_commentgate_comment_quantity', true ) );
 		return $custom ? $custom : max( 1, absint( $this->settings->get( 'comment_quantity' ) ) );
 	}
 
+	/**
+	 * Whether the current logged-in user belongs to a role exempted from payment.
+	 *
+	 * @return bool
+	 */
 	private function current_user_is_free() {
 		if ( ! is_user_logged_in() ) {
 			return false;
@@ -292,13 +401,19 @@ class CommentGate_Comment_Gate {
 		return (bool) array_intersect( (array) $user->roles, $free_roles );
 	}
 
+	/**
+	 * Render the payment box markup shown in place of the comment form when locked.
+	 *
+	 * @param int $post_id Post ID being commented on.
+	 * @return string HTML markup, escaped within the template.
+	 */
 	private function render_payment_box( $post_id ) {
-		$options  = $this->settings->get_all();
-		$gateways = (array) $options['gateways'];
-		$price    = $this->price_for_post( $post_id );
-		$currency = $options['currency'];
-		$access_type      = $this->access_type_for_post( $post_id );
-		$comment_quantity = $this->comment_quantity_for_post( $post_id );
+		$options           = $this->settings->get_all();
+		$gateways          = (array) $options['gateways'];
+		$price             = $this->price_for_post( $post_id );
+		$currency          = $options['currency'];
+		$access_type       = $this->access_type_for_post( $post_id );
+		$comment_quantity  = $this->comment_quantity_for_post( $post_id );
 		$stripe_text       = $options['stripe_button_text'] ? $options['stripe_button_text'] : __( 'Pay with Stripe to Comment', 'commentgate' );
 		$paypal_text       = $options['paypal_button_text'] ? $options['paypal_button_text'] : __( 'Pay with PayPal to Comment', 'commentgate' );
 		$button_bg_color   = '1' === $options['use_custom_button_colors'] ? $options['button_bg_color'] : '';
@@ -309,6 +424,12 @@ class CommentGate_Comment_Gate {
 		return ob_get_clean();
 	}
 
+	/**
+	 * Set the HttpOnly, SameSite=Lax raw access-token cookie granting comment
+	 * access, and mirror it into $_COOKIE so it is usable within the same request.
+	 *
+	 * @param string $token Raw access token.
+	 */
 	private function set_access_cookie( $token ) {
 		setcookie(
 			'commentgate_access',
@@ -325,6 +446,13 @@ class CommentGate_Comment_Gate {
 		$_COOKIE['commentgate_access'] = $token;
 	}
 
+	/**
+	 * Set the HttpOnly, SameSite=Lax signed access-value cookie granting comment
+	 * access via an emailed access link, and mirror it into $_COOKIE so it is
+	 * usable within the same request.
+	 *
+	 * @param string $value Signed access value ("id:signature").
+	 */
 	private function set_signed_access_cookie( $value ) {
 		setcookie(
 			'commentgate_access_payment',

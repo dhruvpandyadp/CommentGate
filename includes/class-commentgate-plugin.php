@@ -22,6 +22,11 @@ class CommentGate_Plugin {
 	public $webhooks;
 	public $admin_payments;
 
+	/**
+	 * Get the singleton instance, creating it on first call.
+	 *
+	 * @return CommentGate_Plugin
+	 */
 	public static function instance() {
 		if ( null === self::$instance ) {
 			self::$instance = new self();
@@ -31,16 +36,19 @@ class CommentGate_Plugin {
 	}
 
 	private function __construct() {
-		$this->payments = new CommentGate_Payments_Table();
-		$this->settings = new CommentGate_Settings();
-		$this->stripe   = new CommentGate_Stripe_Gateway( $this->settings, $this->payments );
-		$this->paypal   = new CommentGate_PayPal_Gateway( $this->settings, $this->payments );
-		$this->gate     = new CommentGate_Comment_Gate( $this->settings, $this->payments, $this->stripe, $this->paypal );
-		$this->webhooks = new CommentGate_Webhooks( $this->stripe, $this->paypal );
+		$this->payments       = new CommentGate_Payments_Table();
+		$this->settings       = new CommentGate_Settings();
+		$this->stripe         = new CommentGate_Stripe_Gateway( $this->settings, $this->payments );
+		$this->paypal         = new CommentGate_PayPal_Gateway( $this->settings, $this->payments );
+		$this->gate           = new CommentGate_Comment_Gate( $this->settings, $this->payments, $this->stripe, $this->paypal );
+		$this->webhooks       = new CommentGate_Webhooks( $this->stripe, $this->paypal );
 		$this->admin_payments = new CommentGate_Admin_Payments( $this->payments, $this->stripe, $this->paypal );
 		$this->settings->set_payments_page( $this->admin_payments );
 	}
 
+	/**
+	 * Wire up all plugin hooks and sub-modules. Called once on plugins_loaded.
+	 */
 	public function register() {
 		CommentGate_Payments_Table::maybe_upgrade();
 
@@ -61,6 +69,12 @@ class CommentGate_Plugin {
 		}
 	}
 
+	/**
+	 * Add a "Settings" link to the plugin row on the Plugins screen.
+	 *
+	 * @param array $links Existing plugin action links.
+	 * @return array
+	 */
 	public function add_plugin_action_links( $links ) {
 		$settings_link = sprintf(
 			'<a href="%s">%s</a>',
@@ -73,11 +87,19 @@ class CommentGate_Plugin {
 		return $links;
 	}
 
+	/**
+	 * Enqueue the frontend payment-box styles and script on every page.
+	 */
 	public function enqueue_frontend_assets() {
 		wp_enqueue_style( 'commentgate-frontend', COMMENTGATE_URL . 'assets/css/frontend.css', array(), COMMENTGATE_VERSION );
 		wp_enqueue_script( 'commentgate-frontend', COMMENTGATE_URL . 'assets/js/frontend.js', array(), COMMENTGATE_VERSION, true );
 	}
 
+	/**
+	 * Enqueue admin assets on CommentGate screens and the post editor.
+	 *
+	 * @param string $hook Current admin page hook suffix.
+	 */
 	public function enqueue_admin_assets( $hook ) {
 		if ( false === strpos( (string) $hook, 'commentgate' ) && 'post.php' !== $hook && 'post-new.php' !== $hook ) {
 			return;
@@ -99,6 +121,11 @@ class CommentGate_Plugin {
 		}
 	}
 
+	/**
+	 * Email the site administrator when a payment is completed.
+	 *
+	 * @param int $payment_id Payment record ID.
+	 */
 	public function send_admin_payment_email( $payment_id ) {
 		if ( '1' !== $this->settings->get( 'admin_payment_email' ) ) {
 			return;
@@ -120,7 +147,7 @@ class CommentGate_Plugin {
 			__( '[%s] CommentGate payment received', 'commentgate' ),
 			wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES )
 		);
-		$message    = sprintf(
+		$message = sprintf(
 			/* translators: 1: amount, 2: gateway, 3: post title, 4: payer, 5: payment ID */
 			__( "A CommentGate payment was completed.\n\nAmount: %1\$s\nGateway: %2\$s\nContent: %3\$s\nPayer: %4\$s\nPayment ID: %5\$d\n", 'commentgate' ),
 			$payment->currency . ' ' . number_format_i18n( (float) $payment->amount, 2 ),
@@ -133,6 +160,11 @@ class CommentGate_Plugin {
 		wp_mail( $admin_email, $subject, $message, $this->email_headers( false ) );
 	}
 
+	/**
+	 * Email the customer their receipt and access link once payment is completed.
+	 *
+	 * @param int $payment_id Payment record ID.
+	 */
 	public function send_customer_payment_email( $payment_id ) {
 		if ( '1' !== $this->settings->get( 'customer_payment_email' ) ) {
 			return;
@@ -146,6 +178,11 @@ class CommentGate_Plugin {
 		$this->send_customer_email( $payment, 'payment' );
 	}
 
+	/**
+	 * Email the customer when their payment is refunded.
+	 *
+	 * @param int $payment_id Payment record ID.
+	 */
 	public function send_customer_refund_email( $payment_id ) {
 		if ( '1' !== $this->settings->get( 'refund_email' ) ) {
 			return;
@@ -159,26 +196,38 @@ class CommentGate_Plugin {
 		$this->send_customer_email( $payment, 'refund' );
 	}
 
+	/**
+	 * Build and send a customer-facing payment or refund email.
+	 *
+	 * @param object $payment Payment row.
+	 * @param string $type    Either 'payment' or 'refund'.
+	 */
 	private function send_customer_email( $payment, $type ) {
 		$email = $this->payment_email_address( $payment );
 		if ( ! is_email( $email ) ) {
 			return;
 		}
 
-		$subject_key = 'refund' === $type ? 'refund_email_subject' : 'payment_email_subject';
-		$body_key    = 'refund' === $type ? 'refund_email_body' : 'payment_email_body';
+		$subject_key     = 'refund' === $type ? 'refund_email_subject' : 'payment_email_subject';
+		$body_key        = 'refund' === $type ? 'refund_email_body' : 'payment_email_body';
 		$is_invoice_html = 'html' === $this->settings->get( 'email_format' );
-		$subject     = $this->replace_email_tags( $this->settings->get( $subject_key ), $payment );
-		$body        = $this->replace_email_tags( $this->settings->get( $body_key ), $payment, ! $is_invoice_html );
+		$subject         = $this->replace_email_tags( $this->settings->get( $subject_key ), $payment );
+		$body            = $this->replace_email_tags( $this->settings->get( $body_key ), $payment, ! $is_invoice_html );
 		if ( 'refund' === $type ) {
 			$body = preg_replace( '/^\s*Refund ID:\s*.*$/mi', '', $body );
 		}
-		$message         = $is_invoice_html ? $this->customer_email_html( $payment, $type, trim( $body ) ) : $this->customer_email_simple_html( $payment, $type, trim( $body ) );
-		$headers         = $this->email_headers( true );
+		$message = $is_invoice_html ? $this->customer_email_html( $payment, $type, trim( $body ) ) : $this->customer_email_simple_html( $payment, $type, trim( $body ) );
+		$headers = $this->email_headers( true );
 
 		wp_mail( $email, $subject, $message, $headers );
 	}
 
+	/**
+	 * Resolve the email address to send customer notices to.
+	 *
+	 * @param object $payment Payment row.
+	 * @return string Guest email, account email, or an empty string if none is valid.
+	 */
 	private function payment_email_address( $payment ) {
 		if ( ! empty( $payment->guest_email ) && is_email( $payment->guest_email ) ) {
 			return $payment->guest_email;
@@ -194,6 +243,12 @@ class CommentGate_Plugin {
 		return '';
 	}
 
+	/**
+	 * Build wp_mail() headers using the site name and admin email as From/Reply-To.
+	 *
+	 * @param bool $html Whether to include an HTML content-type header.
+	 * @return array
+	 */
 	private function email_headers( $html = true ) {
 		$admin_email = get_option( 'admin_email' );
 		$site_name   = sanitize_text_field( wp_specialchars_decode( get_bloginfo( 'name' ), ENT_QUOTES ) );
@@ -207,6 +262,15 @@ class CommentGate_Plugin {
 		return $headers;
 	}
 
+	/**
+	 * Replace {amount}, {content}, {access}, {url}, {payment_id}, {refund_id}, and {footer}
+	 * placeholders in an admin-configured email template.
+	 *
+	 * @param string $text            Template text containing placeholders.
+	 * @param object $payment         Payment row.
+	 * @param bool   $use_content_url Whether {url} should link to the content instead of the signed access link.
+	 * @return string
+	 */
 	private function replace_email_tags( $text, $payment, $use_content_url = false ) {
 		$post_title = get_the_title( $payment->post_id );
 		$url        = $use_content_url ? $this->customer_content_url( $payment ) : $this->customer_access_url( $payment );
@@ -240,6 +304,12 @@ class CommentGate_Plugin {
 		return strtr( (string) $text, $replacements );
 	}
 
+	/**
+	 * Build the signed admin-post URL that reopens the paid comment area from an email.
+	 *
+	 * @param object $payment Payment row.
+	 * @return string
+	 */
 	private function customer_access_url( $payment ) {
 		$access_key = $this->payments->signed_access_value( $payment );
 		if ( $access_key ) {
@@ -258,16 +328,30 @@ class CommentGate_Plugin {
 		return $url ? $url : home_url( '/' );
 	}
 
+	/**
+	 * Get the public permalink for the paid content.
+	 *
+	 * @param object $payment Payment row.
+	 * @return string
+	 */
 	private function customer_content_url( $payment ) {
 		$url = get_permalink( $payment->post_id );
 		return $url ? $url : home_url( '/' );
 	}
 
+	/**
+	 * Render the HTML invoice-style customer email body.
+	 *
+	 * @param object $payment Payment row.
+	 * @param string $type    Either 'payment' or 'refund'.
+	 * @param string $body    Already-resolved template body text.
+	 * @return string HTML email markup.
+	 */
 	private function customer_email_html( $payment, $type, $body ) {
-		$title      = 'refund' === $type ? __( 'Refund receipt', 'commentgate' ) : __( 'Payment receipt', 'commentgate' );
-		$notice     = 'refund' === $type ? __( 'This payment has been refunded. If you still need comment access, please make a new purchase from the content page.', 'commentgate' ) : __( 'You can reopen the paid comment area from this secure email link until your comment credit is used or your access expires.', 'commentgate' );
-		$logo       = '';
-		$logo_url   = $this->settings->get( 'email_logo_url' );
+		$title    = 'refund' === $type ? __( 'Refund receipt', 'commentgate' ) : __( 'Payment receipt', 'commentgate' );
+		$notice   = 'refund' === $type ? __( 'This payment has been refunded. If you still need comment access, please make a new purchase from the content page.', 'commentgate' ) : __( 'You can reopen the paid comment area from this secure email link until your comment credit is used or your access expires.', 'commentgate' );
+		$logo     = '';
+		$logo_url = $this->settings->get( 'email_logo_url' );
 		if ( $logo_url ) {
 			$logo = sprintf(
 				'<div style="padding:20px 24px 0;text-align:center;"><img src="%1$s" alt="%2$s" style="height:auto;max-height:64px;max-width:220px;"></div>',
@@ -309,6 +393,14 @@ class CommentGate_Plugin {
 		);
 	}
 
+	/**
+	 * Render the simple text-style customer email body.
+	 *
+	 * @param object $payment Payment row.
+	 * @param string $type    Either 'payment' or 'refund'.
+	 * @param string $body    Already-resolved template body text.
+	 * @return string HTML email markup.
+	 */
 	private function customer_email_simple_html( $payment, $type, $body ) {
 		$title      = 'refund' === $type ? __( 'Refund receipt', 'commentgate' ) : __( 'Payment receipt', 'commentgate' );
 		$notice     = 'refund' === $type ? __( 'This payment has been refunded. If you still need comment access, please make a new purchase from the content page.', 'commentgate' ) : __( 'You can reopen the paid comment area from this secure email link until your comment credit is used or your access expires.', 'commentgate' );
@@ -352,6 +444,9 @@ class CommentGate_Plugin {
 		);
 	}
 
+	/**
+	 * Remove plugin data on uninstall: options, the payments table, and post meta.
+	 */
 	public static function uninstall() {
 		global $wpdb;
 

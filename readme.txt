@@ -1,19 +1,21 @@
 === CommentGate  ===
-Contributors: dhruvpandya
+Contributors: dhruvpandya, alkesh7
 Donate link: https://www.paypal.com/paypalme/dhruvpandyadp97
 Tags: comments, paid comments, monetization, paywall, comment paywall
 Requires at least: 6.0
 Tested up to: 7.0
 Requires PHP: 7.4
-Stable tag: 1.0.0
+Stable tag: 1.0.1
 License: GPL-2.0-or-later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Monetize comments by requiring Stripe or PayPal payment before visitors can comment.
+Monetize comments: require a Stripe or PayPal payment before visitors can comment on chosen posts, pages, or custom post types.
 
 == Description ==
 
 **CommentGate** helps site owners turn comment access into a paid engagement flow. Visitors enter one email address, complete payment through Stripe or PayPal, and unlock the comment form for protected content.
+
+Access can be sold as a fixed number of comment credits or as time-limited duration access, priced globally or overridden per post, page, or custom post type. Logged-in users, guests, and selected roles are all supported, payment status and transaction history stay visible from one admin dashboard, and customers get secure email receipts with a link back to the unlocked comment area.
 
 Use CommentGate for paid communities, expert Q&A posts, premium discussion areas, gated announcements, niche publications, and any site where comment access should have value.
 
@@ -178,6 +180,14 @@ No. CommentGate controls paid access to comment forms. WordPress Discussion Sett
 
 == Changelog ==
 
+= 1.0.1 =
+
+* Hardened Stripe webhook signature verification to reject stale/replayed signed payloads outside a 5-minute tolerance window.
+* Applied WordPress Coding Standards (WordPress-Extra) formatting fixes across the codebase; verified clean against PHPCompatibilityWP for PHP 7.4-8.3.
+* Expanded inline PHPDoc coverage for improved code readability and maintainability.
+* Confirmed compatibility with WordPress 7.0.
+* Expanded the plugin's short description for clarity.
+
 = 1.0.0 =
 
 Initial release.
@@ -205,6 +215,10 @@ Initial release.
 * Added WordPress.org security hardening for nonces, capabilities, sanitization, escaping, prepared queries, webhook signature checks, and third-party service disclosures.
 
 == Upgrade Notice ==
+
+= 1.0.1 =
+
+Security hardening for Stripe webhook signature verification, coding standards fixes, and confirmed WordPress 7.0 compatibility. Recommended for all users.
 
 = 1.0.0 =
 

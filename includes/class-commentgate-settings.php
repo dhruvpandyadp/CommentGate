@@ -14,10 +14,19 @@ class CommentGate_Settings {
 
 	private $payments_page;
 
+	/**
+	 * Inject the admin payments screen instance so it can be rendered from the
+	 * "Transaction History" tab.
+	 *
+	 * @param CommentGate_Admin_Payments $payments_page Admin payments screen instance.
+	 */
 	public function set_payments_page( $payments_page ) {
 		$this->payments_page = $payments_page;
 	}
 
+	/**
+	 * Wire up the settings page, registered setting, meta box, and post meta save hooks.
+	 */
 	public function register() {
 		add_action( 'admin_menu', array( $this, 'add_settings_page' ) );
 		add_action( 'admin_init', array( $this, 'register_settings' ) );
@@ -25,58 +34,78 @@ class CommentGate_Settings {
 		add_action( 'save_post', array( $this, 'save_post_meta' ) );
 	}
 
+	/**
+	 * Default values for every stored setting.
+	 *
+	 * @return array
+	 */
 	public function defaults() {
 		return array(
-			'enabled'               => '0',
-			'price'                 => '5.00',
-			'currency'              => 'USD',
-			'post_types'            => array( 'post' ),
-			'gateways'              => array( 'stripe' ),
-			'free_roles'            => array( 'administrator' ),
-			'auto_approve_paid'     => '1',
-			'admin_payment_email'   => '1',
-			'customer_payment_email' => '1',
-			'refund_email'          => '1',
-			'payment_email_subject' => 'Your comment access is ready',
-			'payment_email_body'    => "Thank you for your payment. Your comment access is ready.\n\nUse the secure access link below to reopen the paid comment area until your comment credit is used or access expires.",
-			'refund_email_subject'  => 'Your comment access payment was refunded',
-			'refund_email_body'     => 'Your payment was refunded.',
-			'email_footer'          => '',
-			'email_logo_url'        => '',
-			'email_format'          => 'html',
-			'access_type'           => 'comments',
-			'access_duration'       => '1',
-			'comment_quantity'      => '1',
-			'stripe_publishable'    => '',
-			'stripe_secret'         => '',
-			'stripe_webhook_secret' => '',
-			'paypal_client_id'      => '',
-			'paypal_secret'         => '',
-			'paypal_webhook_id'     => '',
-			'paypal_mode'           => 'sandbox',
-			'stripe_button_text'    => '',
-			'paypal_button_text'    => '',
+			'enabled'                  => '0',
+			'price'                    => '5.00',
+			'currency'                 => 'USD',
+			'post_types'               => array( 'post' ),
+			'gateways'                 => array( 'stripe' ),
+			'free_roles'               => array( 'administrator' ),
+			'auto_approve_paid'        => '1',
+			'admin_payment_email'      => '1',
+			'customer_payment_email'   => '1',
+			'refund_email'             => '1',
+			'payment_email_subject'    => __( 'Your comment access is ready', 'commentgate' ),
+			'payment_email_body'       => __( "Thank you for your payment. Your comment access is ready.\n\nUse the secure access link below to reopen the paid comment area until your comment credit is used or access expires.", 'commentgate' ),
+			'refund_email_subject'     => __( 'Your comment access payment was refunded', 'commentgate' ),
+			'refund_email_body'        => __( 'Your payment was refunded.', 'commentgate' ),
+			'email_footer'             => '',
+			'email_logo_url'           => '',
+			'email_format'             => 'html',
+			'access_type'              => 'comments',
+			'access_duration'          => '1',
+			'comment_quantity'         => '1',
+			'stripe_publishable'       => '',
+			'stripe_secret'            => '',
+			'stripe_webhook_secret'    => '',
+			'paypal_client_id'         => '',
+			'paypal_secret'            => '',
+			'paypal_webhook_id'        => '',
+			'paypal_mode'              => 'sandbox',
+			'stripe_button_text'       => '',
+			'paypal_button_text'       => '',
 			'use_custom_button_colors' => '0',
-			'button_bg_color'       => '',
-			'button_text_color'     => '',
+			'button_bg_color'          => '',
+			'button_text_color'        => '',
 		);
 	}
 
+	/**
+	 * Get all settings, merged with defaults and with the gateways list
+	 * normalized to known values.
+	 *
+	 * @return array
+	 */
 	public function get_all() {
 		$options = get_option( self::OPTION_NAME, array() );
 		$options = wp_parse_args( is_array( $options ) ? $options : array(), $this->defaults() );
 
-		$gateways = array_values( array_intersect( array_map( 'sanitize_key', (array) $options['gateways'] ), array( 'stripe', 'paypal' ) ) );
+		$gateways            = array_values( array_intersect( array_map( 'sanitize_key', (array) $options['gateways'] ), array( 'stripe', 'paypal' ) ) );
 		$options['gateways'] = $gateways ? $gateways : array( 'stripe' );
 
 		return $options;
 	}
 
+	/**
+	 * Get a single setting value by key.
+	 *
+	 * @param string $key Setting key.
+	 * @return mixed Null if the key does not exist.
+	 */
 	public function get( $key ) {
 		$options = $this->get_all();
 		return isset( $options[ $key ] ) ? $options[ $key ] : null;
 	}
 
+	/**
+	 * Register the CommentGate settings page as a Comments submenu page.
+	 */
 	public function add_settings_page() {
 		add_submenu_page(
 			'edit-comments.php',
@@ -88,6 +117,10 @@ class CommentGate_Settings {
 		);
 	}
 
+	/**
+	 * Register the commentgate_settings option with WordPress Settings API,
+	 * routing all saves through sanitize_settings().
+	 */
 	public function register_settings() {
 		register_setting(
 			'commentgate',
@@ -100,10 +133,19 @@ class CommentGate_Settings {
 		);
 	}
 
+	/**
+	 * Sanitize and merge settings form input, registered as the option's
+	 * sanitize_callback. Only fields belonging to the submitted tab
+	 * (commentgate_active_tab) are updated; all other tabs' values pass through
+	 * unchanged so submitting one tab never clobbers another's settings.
+	 *
+	 * @param array $input Raw settings form input.
+	 * @return array Sanitized settings ready to store.
+	 */
 	public function sanitize_settings( $input ) {
-		$input    = is_array( $input ) ? wp_unslash( $input ) : array();
-		$defaults = $this->defaults();
-		$current  = $this->get_all();
+		$input      = is_array( $input ) ? wp_unslash( $input ) : array();
+		$defaults   = $this->defaults();
+		$current    = $this->get_all();
 		$active_tab = $this->normalize_tab( $input['commentgate_active_tab'] ?? 'general-settings' );
 		if ( 'general-settings' === $active_tab ) {
 			if ( ! isset( $input['enabled'] ) ) {
@@ -136,61 +178,72 @@ class CommentGate_Settings {
 		if ( 'appearance' === $active_tab && ! isset( $input['use_custom_button_colors'] ) ) {
 			$input['use_custom_button_colors'] = '0';
 		}
-		$input    = wp_parse_args( $input, $current );
+		$input = wp_parse_args( $input, $current );
 
 		$post_types = array_intersect( array_map( 'sanitize_key', (array) ( $input['post_types'] ?? array() ) ), get_post_types( array( 'public' => true ), 'names' ) );
-		$gateways = array_values( array_intersect( array_map( 'sanitize_key', (array) ( $input['gateways'] ?? array() ) ), array( 'stripe', 'paypal' ) ) );
+		$gateways   = array_values( array_intersect( array_map( 'sanitize_key', (array) ( $input['gateways'] ?? array() ) ), array( 'stripe', 'paypal' ) ) );
 		if ( ! $gateways ) {
 			$gateways = $current['gateways'];
 		}
-		$roles      = array_keys( wp_roles()->roles );
-		$free_roles = array_intersect( array_map( 'sanitize_key', (array) ( $input['free_roles'] ?? array() ) ), $roles );
+		$roles       = array_keys( wp_roles()->roles );
+		$free_roles  = array_intersect( array_map( 'sanitize_key', (array) ( $input['free_roles'] ?? array() ) ), $roles );
 		$access_type = sanitize_key( $input['access_type'] ?? $defaults['access_type'] );
 		if ( ! in_array( $access_type, array( 'duration', 'comments' ), true ) ) {
 			$access_type = $defaults['access_type'];
 		}
 
 		return array(
-			'enabled'               => 'general-settings' === $active_tab ? ( empty( $input['enabled'] ) ? '0' : '1' ) : $current['enabled'],
-			'price'                 => $this->sanitize_price( $input['price'] ?? $defaults['price'] ),
-			'currency'              => $this->sanitize_currency( $input['currency'] ?? $defaults['currency'] ),
-			'post_types'            => 'general-settings' === $active_tab ? array_values( $post_types ) : $current['post_types'],
-			'gateways'              => 'general-settings' === $active_tab ? $gateways : $current['gateways'],
-			'free_roles'            => 'general-settings' === $active_tab ? array_values( $free_roles ) : $current['free_roles'],
-			'auto_approve_paid'     => 'general-settings' === $active_tab ? ( empty( $input['auto_approve_paid'] ) ? '0' : '1' ) : $current['auto_approve_paid'],
-			'admin_payment_email'   => 'email-settings' === $active_tab ? ( empty( $input['admin_payment_email'] ) ? '0' : '1' ) : $current['admin_payment_email'],
-			'customer_payment_email' => 'email-settings' === $active_tab ? ( empty( $input['customer_payment_email'] ) ? '0' : '1' ) : $current['customer_payment_email'],
-			'refund_email'          => 'email-settings' === $active_tab ? ( empty( $input['refund_email'] ) ? '0' : '1' ) : $current['refund_email'],
-			'payment_email_subject' => 'email-settings' === $active_tab ? sanitize_text_field( $input['payment_email_subject'] ?? $defaults['payment_email_subject'] ) : $current['payment_email_subject'],
-			'payment_email_body'    => 'email-settings' === $active_tab ? sanitize_textarea_field( $input['payment_email_body'] ?? $defaults['payment_email_body'] ) : $current['payment_email_body'],
-			'refund_email_subject'  => 'email-settings' === $active_tab ? sanitize_text_field( $input['refund_email_subject'] ?? $defaults['refund_email_subject'] ) : $current['refund_email_subject'],
-			'refund_email_body'     => 'email-settings' === $active_tab ? sanitize_textarea_field( $input['refund_email_body'] ?? $defaults['refund_email_body'] ) : $current['refund_email_body'],
-			'email_footer'          => 'email-settings' === $active_tab ? sanitize_textarea_field( $input['email_footer'] ?? $defaults['email_footer'] ) : $current['email_footer'],
-			'email_logo_url'        => 'email-settings' === $active_tab ? esc_url_raw( $input['email_logo_url'] ?? '' ) : $current['email_logo_url'],
-			'email_format'          => 'email-settings' === $active_tab && 'html' === ( $input['email_format'] ?? '' ) ? 'html' : ( 'email-settings' === $active_tab ? 'plain' : $current['email_format'] ),
-			'access_type'           => $access_type,
-			'access_duration'       => max( 0, absint( $input['access_duration'] ?? 0 ) ),
-			'comment_quantity'      => max( 1, absint( $input['comment_quantity'] ?? 1 ) ),
-			'stripe_publishable'    => sanitize_text_field( $input['stripe_publishable'] ?? '' ),
-			'stripe_secret'         => sanitize_text_field( $input['stripe_secret'] ?? '' ),
-			'stripe_webhook_secret' => sanitize_text_field( $input['stripe_webhook_secret'] ?? '' ),
-			'paypal_client_id'      => sanitize_text_field( $input['paypal_client_id'] ?? '' ),
-			'paypal_secret'         => sanitize_text_field( $input['paypal_secret'] ?? '' ),
-			'paypal_webhook_id'     => sanitize_text_field( $input['paypal_webhook_id'] ?? '' ),
-			'paypal_mode'           => 'live' === ( $input['paypal_mode'] ?? '' ) ? 'live' : 'sandbox',
-			'stripe_button_text'    => sanitize_text_field( $input['stripe_button_text'] ?? '' ),
-			'paypal_button_text'    => sanitize_text_field( $input['paypal_button_text'] ?? '' ),
+			'enabled'                  => 'general-settings' === $active_tab ? ( empty( $input['enabled'] ) ? '0' : '1' ) : $current['enabled'],
+			'price'                    => $this->sanitize_price( $input['price'] ?? $defaults['price'] ),
+			'currency'                 => $this->sanitize_currency( $input['currency'] ?? $defaults['currency'] ),
+			'post_types'               => 'general-settings' === $active_tab ? array_values( $post_types ) : $current['post_types'],
+			'gateways'                 => 'general-settings' === $active_tab ? $gateways : $current['gateways'],
+			'free_roles'               => 'general-settings' === $active_tab ? array_values( $free_roles ) : $current['free_roles'],
+			'auto_approve_paid'        => 'general-settings' === $active_tab ? ( empty( $input['auto_approve_paid'] ) ? '0' : '1' ) : $current['auto_approve_paid'],
+			'admin_payment_email'      => 'email-settings' === $active_tab ? ( empty( $input['admin_payment_email'] ) ? '0' : '1' ) : $current['admin_payment_email'],
+			'customer_payment_email'   => 'email-settings' === $active_tab ? ( empty( $input['customer_payment_email'] ) ? '0' : '1' ) : $current['customer_payment_email'],
+			'refund_email'             => 'email-settings' === $active_tab ? ( empty( $input['refund_email'] ) ? '0' : '1' ) : $current['refund_email'],
+			'payment_email_subject'    => 'email-settings' === $active_tab ? sanitize_text_field( $input['payment_email_subject'] ?? $defaults['payment_email_subject'] ) : $current['payment_email_subject'],
+			'payment_email_body'       => 'email-settings' === $active_tab ? sanitize_textarea_field( $input['payment_email_body'] ?? $defaults['payment_email_body'] ) : $current['payment_email_body'],
+			'refund_email_subject'     => 'email-settings' === $active_tab ? sanitize_text_field( $input['refund_email_subject'] ?? $defaults['refund_email_subject'] ) : $current['refund_email_subject'],
+			'refund_email_body'        => 'email-settings' === $active_tab ? sanitize_textarea_field( $input['refund_email_body'] ?? $defaults['refund_email_body'] ) : $current['refund_email_body'],
+			'email_footer'             => 'email-settings' === $active_tab ? sanitize_textarea_field( $input['email_footer'] ?? $defaults['email_footer'] ) : $current['email_footer'],
+			'email_logo_url'           => 'email-settings' === $active_tab ? esc_url_raw( $input['email_logo_url'] ?? '' ) : $current['email_logo_url'],
+			'email_format'             => 'email-settings' === $active_tab && 'html' === ( $input['email_format'] ?? '' ) ? 'html' : ( 'email-settings' === $active_tab ? 'plain' : $current['email_format'] ),
+			'access_type'              => $access_type,
+			'access_duration'          => max( 0, absint( $input['access_duration'] ?? 0 ) ),
+			'comment_quantity'         => max( 1, absint( $input['comment_quantity'] ?? 1 ) ),
+			'stripe_publishable'       => sanitize_text_field( $input['stripe_publishable'] ?? '' ),
+			'stripe_secret'            => sanitize_text_field( $input['stripe_secret'] ?? '' ),
+			'stripe_webhook_secret'    => sanitize_text_field( $input['stripe_webhook_secret'] ?? '' ),
+			'paypal_client_id'         => sanitize_text_field( $input['paypal_client_id'] ?? '' ),
+			'paypal_secret'            => sanitize_text_field( $input['paypal_secret'] ?? '' ),
+			'paypal_webhook_id'        => sanitize_text_field( $input['paypal_webhook_id'] ?? '' ),
+			'paypal_mode'              => 'live' === ( $input['paypal_mode'] ?? '' ) ? 'live' : 'sandbox',
+			'stripe_button_text'       => sanitize_text_field( $input['stripe_button_text'] ?? '' ),
+			'paypal_button_text'       => sanitize_text_field( $input['paypal_button_text'] ?? '' ),
 			'use_custom_button_colors' => 'appearance' === $active_tab ? ( empty( $input['use_custom_button_colors'] ) ? '0' : '1' ) : $current['use_custom_button_colors'],
-			'button_bg_color'       => sanitize_hex_color( $input['button_bg_color'] ?? '' ) ?: '',
-			'button_text_color'     => sanitize_hex_color( $input['button_text_color'] ?? '' ) ?: '',
+			'button_bg_color'          => sanitize_hex_color( $input['button_bg_color'] ?? '' ) ?? '',
+			'button_text_color'        => sanitize_hex_color( $input['button_text_color'] ?? '' ) ?? '',
 		);
 	}
 
+	/**
+	 * Sanitize a price input to a positive two-decimal string.
+	 *
+	 * @param mixed $price Raw price input.
+	 * @return string
+	 */
 	private function sanitize_price( $price ) {
 		$price = preg_replace( '/[^0-9.]/', '', (string) $price );
 		return number_format( max( 0.01, (float) $price ), 2, '.', '' );
 	}
 
+	/**
+	 * Supported currency codes mapped to their translated display labels.
+	 *
+	 * @return array
+	 */
 	private function currencies() {
 		return array(
 			'USD' => __( 'US Dollar (USD)', 'commentgate' ),
@@ -210,15 +263,32 @@ class CommentGate_Settings {
 		);
 	}
 
+	/**
+	 * Sanitize a currency code, falling back to USD if it is not a known currency.
+	 *
+	 * @param mixed $currency Raw currency input.
+	 * @return string
+	 */
 	private function sanitize_currency( $currency ) {
 		$currency = strtoupper( sanitize_text_field( $currency ) );
 		return array_key_exists( $currency, $this->currencies() ) ? $currency : 'USD';
 	}
 
+	/**
+	 * Sanitize a settings page tab slug.
+	 *
+	 * @param mixed $tab Raw tab input.
+	 * @return string
+	 */
 	private function normalize_tab( $tab ) {
 		return sanitize_key( $tab );
 	}
 
+	/**
+	 * Render the CommentGate admin settings page, including all tab content.
+	 * Gated on manage_options; the transaction-history tab delegates to the
+	 * admin payments screen instead of a settings form.
+	 */
 	public function render_settings_page() {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
@@ -230,11 +300,11 @@ class CommentGate_Settings {
 		$currencies = $this->currencies();
 		$tab        = $this->normalize_tab( sanitize_key( wp_unslash( $_GET['tab'] ?? 'general-settings' ) ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
 		$tabs       = array(
-			'general-settings'           => __( 'General Settings', 'commentgate' ),
-			'transaction-history'        => __( 'Transaction History', 'commentgate' ),
+			'general-settings'          => __( 'General Settings', 'commentgate' ),
+			'transaction-history'       => __( 'Transaction History', 'commentgate' ),
 			'payment-api-configuration' => __( 'Payment API Configuration', 'commentgate' ),
-			'email-settings'             => __( 'Email Settings', 'commentgate' ),
-			'appearance'                 => __( 'Appearance', 'commentgate' ),
+			'email-settings'            => __( 'Email Settings', 'commentgate' ),
+			'appearance'                => __( 'Appearance', 'commentgate' ),
 		);
 		if ( ! isset( $tabs[ $tab ] ) ) {
 			$tab = 'general-settings';
@@ -247,7 +317,19 @@ class CommentGate_Settings {
 			<?php endif; ?>
 			<nav class="nav-tab-wrapper commentgate-tabs">
 				<?php foreach ( $tabs as $tab_key => $label ) : ?>
-					<a class="nav-tab <?php echo $tab === $tab_key ? 'nav-tab-active' : ''; ?>" href="<?php echo esc_url( add_query_arg( array( 'page' => 'commentgate', 'tab' => $tab_key ), admin_url( 'edit-comments.php' ) ) ); ?>"><?php echo esc_html( $label ); ?></a>
+					<a class="nav-tab <?php echo $tab === $tab_key ? 'nav-tab-active' : ''; ?>" href="
+					<?php
+					echo esc_url(
+						add_query_arg(
+							array(
+								'page' => 'commentgate',
+								'tab'  => $tab_key,
+							),
+							admin_url( 'edit-comments.php' )
+						)
+					);
+					?>
+										"><?php echo esc_html( $label ); ?></a>
 				<?php endforeach; ?>
 			</nav>
 			<?php if ( 'transaction-history' === $tab && $this->payments_page ) : ?>
@@ -413,8 +495,8 @@ class CommentGate_Settings {
 						<th scope="row"><?php esc_html_e( 'Button colors', 'commentgate' ); ?></th>
 						<td>
 							<label class="commentgate-check"><input type="checkbox" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[use_custom_button_colors]" value="1" <?php checked( $options['use_custom_button_colors'], '1' ); ?>> <?php esc_html_e( 'Use custom colors instead of theme button style.', 'commentgate' ); ?></label>
-							<label><?php esc_html_e( 'Background', 'commentgate' ); ?> <input type="color" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[button_bg_color]" value="<?php echo esc_attr( $options['button_bg_color'] ?: '#111827' ); ?>"></label>
-							<label class="commentgate-inline-color"><?php esc_html_e( 'Text', 'commentgate' ); ?> <input type="color" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[button_text_color]" value="<?php echo esc_attr( $options['button_text_color'] ?: '#ffffff' ); ?>"></label>
+							<label><?php esc_html_e( 'Background', 'commentgate' ); ?> <input type="color" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[button_bg_color]" value="<?php echo esc_attr( ! empty( $options['button_bg_color'] ) ? $options['button_bg_color'] : '#111827' ); ?>"></label>
+							<label class="commentgate-inline-color"><?php esc_html_e( 'Text', 'commentgate' ); ?> <input type="color" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[button_text_color]" value="<?php echo esc_attr( ! empty( $options['button_text_color'] ) ? $options['button_text_color'] : '#ffffff' ); ?>"></label>
 						</td>
 					</tr>
 					<?php endif; ?>
@@ -441,6 +523,12 @@ class CommentGate_Settings {
 		<?php
 	}
 
+	/**
+	 * Render the setup checklist showing which gateway credentials and site
+	 * requirements are configured, on the Payment API Configuration tab.
+	 *
+	 * @param array $options Current settings.
+	 */
 	private function render_diagnostics( $options ) {
 		$checks = array(
 			array(
@@ -492,6 +580,12 @@ class CommentGate_Settings {
 		<?php
 	}
 
+	/**
+	 * Render a live preview of the payment and refund customer emails using
+	 * sample placeholder data, on the Email Settings tab.
+	 *
+	 * @param array $options Current settings.
+	 */
 	private function render_email_preview( $options ) {
 		$logo = '';
 		if ( ! empty( $options['email_logo_url'] ) ) {
@@ -530,6 +624,14 @@ class CommentGate_Settings {
 		<?php
 	}
 
+	/**
+	 * Render the simple text-style email preview frame.
+	 *
+	 * @param string $title     Email title.
+	 * @param string $body      Resolved template body text.
+	 * @param string $footer    Resolved footer text.
+	 * @param bool   $is_refund Whether this is the refund email preview.
+	 */
 	private function render_simple_email_preview( $title, $body, $footer, $is_refund ) {
 		$lines = array(
 			esc_html( $title ),
@@ -567,6 +669,15 @@ class CommentGate_Settings {
 		<?php
 	}
 
+	/**
+	 * Render the HTML invoice-style email preview frame.
+	 *
+	 * @param string $title     Email title.
+	 * @param string $body      Resolved template body text.
+	 * @param string $footer    Resolved footer text.
+	 * @param string $logo      Pre-rendered logo HTML, or an empty string.
+	 * @param bool   $is_refund Whether this is the refund email preview.
+	 */
 	private function render_single_email_preview( $title, $body, $footer, $logo, $is_refund ) {
 		?>
 		<div class="commentgate-email-preview-frame">
@@ -599,12 +710,21 @@ class CommentGate_Settings {
 		<?php
 	}
 
+	/**
+	 * Add the CommentGate meta box to the editor sidebar of every public post type.
+	 */
 	public function add_meta_boxes() {
 		foreach ( get_post_types( array( 'public' => true ), 'names' ) as $post_type ) {
 			add_meta_box( 'commentgate', __( 'CommentGate', 'commentgate' ), array( $this, 'render_meta_box' ), $post_type, 'side' );
 		}
 	}
 
+	/**
+	 * Render the per-post CommentGate override fields (payment mode, price,
+	 * access type, comment quantity) in the editor meta box.
+	 *
+	 * @param WP_Post $post Current post being edited.
+	 */
 	public function render_meta_box( $post ) {
 		wp_nonce_field( 'commentgate_save_meta', 'commentgate_meta_nonce' );
 
@@ -640,6 +760,13 @@ class CommentGate_Settings {
 		<?php
 	}
 
+	/**
+	 * Save the per-post CommentGate override meta from the editor meta box.
+	 * Verifies the meta box nonce, skips autosaves, and checks the current
+	 * user can edit the post before writing anything.
+	 *
+	 * @param int $post_id Post being saved.
+	 */
 	public function save_post_meta( $post_id ) {
 		if ( ! isset( $_POST['commentgate_meta_nonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['commentgate_meta_nonce'] ) ), 'commentgate_save_meta' ) ) {
 			return;
